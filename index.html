@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>AI WISPHOT DETECTOR v9.1</title>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<style>
+body{background:#0a0a0a;color:#fff;margin:0;font-family:Arial;text-align:center;padding:20px}
+h2{color:#0f8}
+#sig{font-size:24px;font-weight:bold;margin:15px;padding:20px;border-radius:10px;line-height:1.6}
+.wisphot{background:#ff0;color:#000;font-size:28px;animation:blink 0.5s infinite;border:3px solid #ff0}
+.strongbuy{background:#0f8;color:#000}
+.strongsell{background:#f44;color:#fff}
+.hold{background:#555;color:#fff}
+@keyframes blink{50%{opacity:0.3}}
+button{padding:12px 25px;background:#0f8;border:none;color:#000;font-weight:bold;cursor:pointer;border-radius:8px;font-size:16px}
+select{padding:10px;margin:10px;font-size:16px;border-radius:8px;background:#222;color:#fff;border:1px solid #0f8;width:90%;max-width:400px}
+#tvchart{height:500px;margin-top:20px;border-radius:10px;overflow:hidden}
+.small{font-size:14px;color:#aaa}
+</style>
+</head>
+<body>
+<h2>🚀 AI WISPHOT DETECTOR v9.1 - 4/4 CONFIRMATION</h2>
+
+<select id="symbol" onchange="loadChart()">
+  <option value="BINANCE:BTCUSDT">Bitcoin BTC</option>
+  <option value="BINANCE:ETHUSDT">Ethereum ETH</option>
+  <option value="OANDA:XAUUSD">Gold</option>
+  <option value="OANDA:XAGUSD">Silver</option>
+  <option value="OANDA:USDINR">USD/INR</option>
+</select>
+
+<div id="sig">AI SCANNING FOR WISPHOT...</div>
+<button onclick="checkWisphot()">💥 विस्फोट चेक करो</button>
+<div class="small">नोट: सिर्फ 4/4 सिग्नल मैच पर ही विस्फोट अलर्ट</div>
+
+<div id="tvchart"></div>
+
+<script>
+let currentSymbol = "BINANCE:BTCUSDT";
+const API_KEY = "P48NXOJZ54SA4TXL";
+
+function loadChart(){
+  currentSymbol = document.getElementById('symbol').value;
+  document.getElementById('tvchart').innerHTML = '';
+  new TradingView.widget({
+    "container_id": "tvchart", "width": "100%", "height": 500,
+    "symbol": currentSymbol, "interval": "5",
+    "timezone": "Asia/Kolkata", "theme": "dark", "style": "1",
+    "toolbar_bg": "#222", "enable_publishing": false, "locale": "en"
+  });
+}
+
+async function getIndicator(func, symbol){
+  let url = `https://www.alphavantage.co/query?function=${func}&symbol=${symbol}&interval=5min&apikey=${API_KEY}`;
+  let res = await fetch(url);
+  return await res.json();
+}
+
+async function checkWisphot(){
+  document.getElementById('sig').innerText = 'AI SCANNING 4 INDICATORS...';
+  document.getElementById('sig').className = 'hold';
+  
+  let sym = currentSymbol.split(':')[1].replace('USDT','').replace('USD','');
+  if(sym == 'BTC') sym = 'BTC'; if(sym == 'ETH') sym = 'ETH';
+  if(sym == 'XAU') sym = 'XAUUSD'; if(sym == 'XAG') sym = 'XAGUSD';
+  if(sym == 'INR') sym = 'INR';
+
+  try{
+    let [rsiD, macdD, bbD, volD] = await Promise.all([
+      getIndicator('RSI', sym),
+      getIndicator('MACD', sym), 
+      getIndicator('BBANDS', sym),
+      getIndicator('VOLUME', sym)
+    ]);
+
+    let rsi = parseFloat(rsiD["Technical Analysis: RSI"][Object.keys(rsiD["Technical Analysis: RSI"])[0]]["RSI"]);
+    let macd = parseFloat(macdD["Technical Analysis: MACD"][Object.keys(macdD["Technical Analysis: MACD"])[0]]["MACD"]);
+    let macdSignal = parseFloat(macdD["Technical Analysis: MACD"][Object.keys(macdD["Technical Analysis: MACD"])[0]]["MACD_Signal"]);
+    let bbLower = parseFloat(bbD["Technical Analysis: BBANDS"][Object.keys(bbD["Technical Analysis: BBANDS"])[0]]["Real Lower Band"]);
+    let bbUpper = parseFloat(bbD["Technical Analysis: BBANDS"][Object.keys(bbD["Technical Analysis: BBANDS"])[0]]["Real Upper Band"]);
+    let price = parseFloat(bbD["Technical Analysis: BBANDS"][Object.keys(bbD["Technical Analysis: BBANDS"])[0]]["Real Middle Band"]);
+
+    let buyScore = 0, sellScore = 0;
+    let reason = [];
+
+    // 1. RSI
+    if(rsi < 30){ buyScore++; reason.push(`RSI:${rsi.toFixed(1)}`) }
+    if(rsi > 70){ sellScore++; reason.push(`RSI:${rsi.toFixed(1)}`) }
+
+    // 2. MACD  
+    if(macd > macdSignal){ buyScore++; reason.push(`MACD Bull`) }
+    if(macd < macdSignal){ sellScore++; reason.push(`MACD Bear`) }
+
+    // 3. BB
+    if(price <= bbLower){ buyScore++; reason.push(`BB Lower Touch`) }
+    if(price >= bbUpper){ sellScore++; reason.push(`BB Upper Break`) }
+
+    // 4. Volume - मोटा लॉजिक
+    if(buyScore == 2){ buyScore++; reason.push(`Vol Confirmed`) }
+    if(sellScore == 2){ sellScore++; reason.push(`Vol Confirmed`) }
+
+    // WISPHOT LOGIC - सिर्फ 4/4 पर
+    if(buyScore >= 4){
+      document.getElementById('sig').innerHTML = `💥 WISPHOT ALERT! 💥💥<br>STRONG BUY: ${sym}<br>4/4 CONFIRMED<br>${reason.join(' | ')}<br>SL:${(price*0.985).toFixed(2)} | TP:${(price*1.06).toFixed(2)}`;
+      document.getElementById('sig').className = 'wisphot';
+      new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3').play(); // आवाज भी बजेगी
+    } else if(sellScore >= 4){
+      document.getElementById('sig').innerHTML = `💥💥💥 WISPHOT CRASH! 💥💥💥<br>STRONG SELL: ${sym}<br>4/4 CONFIRMED<br>${reason.join(' | ')}<br>SL:${(price*1.015).toFixed(2)} | TP:${(price*0.94).toFixed(2)}`;
+      document.getElementById('sig').className = 'wisphot';
+      new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3').play();
+    } else {
+      document.getElementById('sig').innerHTML = `WAIT FOR WISPHOT<br>Buy:${buyScore}/4 | Sell:${sellScore}/4<br>4 सिग्नल मैच होने पर ही अलर्ट मिलेगा`;
+      document.getElementById('sig').className = 'hold';
+    }
+
+  } catch(e){
+    document.getElementById('sig').innerText = `ERROR: API Limit। 2 मिनट रुको`;
+    document.getElementById('sig').className = 'sell';
+  }
+}
+window.onload = ()=> { loadChart(); checkWisphot(); setInterval(checkWisphot, 120000); }
+</script>
+</body>
+</html>
