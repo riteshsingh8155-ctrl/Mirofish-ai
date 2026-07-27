@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>AI WISPHOT v10.1 - TRADE PLAN</title>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<style>
+body{background:#0a0a0a;color:#fff;margin:0;font-family:Arial;text-align:center;padding:20px}
+h2{color:#0f8}
+.balance{font-size:18px;color:#0ff;margin:10px}
+#sig{font-size:20px;font-weight:bold;margin:15px;padding:20px;border-radius:10px;line-height:1.8}
+.wisphot{background:#ff0;color:#000;border:3px solid #ff0}
+.plan{background:#00ccff;color:#000}
+.dhuan{background:#ffcc00;color:#000}
+.hold{background:#555;color:#fff}
+button{padding:12px 25px;background:#0f8;border:none;color:#000;font-weight:bold;cursor:pointer;border-radius:8px;font-size:16px;margin:5px}
+select{padding:10px;margin:10px;font-size:16px;border-radius:8px;background:#222;color:#fff;border:1px solid #0f8;width:90%;max-width:400px}
+#tvchart{height:500px;margin-top:20px;border-radius:10px;overflow:hidden}
+</style>
+</head>
+<body>
+<h2>🚀 AI WISPHOT v10.1 - 1:3 / 1:5 TRADE PLAN</h2>
+
+<div class="balance">💰 Balance: $<span id="balance">1000.00</span> | Risk per trade: 1%</div>
+
+<select id="symbol" onchange="loadChart()">
+  <option value="BTCUSDT">Bitcoin BTC</option>
+  <option value="ETHUSDT">Ethereum ETH</option>
+</select>
+
+<select id="ratio">
+  <option value="3">Risk:Reward 1:3</option>
+  <option value="5">Risk:Reward 1:5</option>
+</select>
+
+<div id="sig">AI SCANNING FOR TRADE PLAN...</div>
+<button onclick="checkWisphot()">💥 AI TRADE PLAN निकालो</button>
+
+<div id="tvchart"></div>
+
+<script>
+let balance = 1000.00; // अपना बैलेंस यहाँ डालो
+let currentSymbol = "BTCUSDT";
+document.getElementById('balance').innerText = balance.toFixed(2);
+
+function loadChart(){
+  currentSymbol = document.getElementById('symbol').value;
+  document.getElementById('tvchart').innerHTML = '';
+  new TradingView.widget({"container_id": "tvchart", "width": "100%", "height": 500, "symbol": "BINANCE:"+currentSymbol, "interval": "5", "theme": "dark"});
+}
+
+async function getBinanceData(symbol){
+  let url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=5m&limit=100`;
+  let res = await fetch(url);
+  return await res.json();
+}
+
+function calculateIndicators(candles){
+  let closes = candles.map(c => parseFloat(c[4]));
+  let highs = candles.map(c => parseFloat(c[2]));
+  let lows = candles.map(c => parseFloat(c[3]));
+  let volumes = candles.map(c => parseFloat(c[5]));
+  let price = closes[closes.length-1];
+
+  // RSI
+  let gains=0, losses=0;
+  for(let i=1; i<15; i++){ let diff = closes[i]-closes[i-1]; if(diff>0) gains+=diff; else losses+=Math.abs(diff); }
+  let rsi = 100 - (100/(1+(gains/losses)));
+
+  // BB
+  let sum=0; for(let i=closes.length-20;i<closes.length;i++) sum+=closes[i];
+  let sma = sum/20; let std=0; for(let i=closes.length-20;i<closes.length;i++) std+=Math.pow(closes[i]-sma,2);
+  std=Math.sqrt(std/20); let bbUpper = sma + 2*std; let bbLower = sma - 2*std;
+
+  // Volume
+  let avgVol = volumes.slice(-20).reduce((a,b)=>a+b)/20; let currentVol = volumes[volumes.length-1];
+
+  return {price, rsi, bbUpper, bbLower, currentVol, avgVol, high:highs[highs.length-1], low:lows[lows.length-1]};
+}
+
+async function checkWisphot(){
+  document.getElementById('sig').innerText = 'AI ANALYZING...';
+  let ratio = parseInt(document.getElementById('ratio').value);
+
+  try{
+    let candles = await getBinanceData(currentSymbol);
+    let {price, rsi, bbUpper, bbLower, currentVol, avgVol, high, low} = calculateIndicators(candles);
+
+    let buyScore=0, sellScore=0;
+    if(rsi < 35) buyScore++; if(rsi > 65) sellScore++;
+    if(price > candles[candles.length-2][4]) buyScore++; else sellScore++;
+    if(price <= bbLower) buyScore++; if(price >= bbUpper) sellScore++;
+    if(currentVol > avgVol*1.5) {buyScore++; sellScore++;}
+
+    // AI TRADE PLAN LOGIC
+    let riskAmount = balance * 0.01; // 1% risk
+    let plan = "";
+
+    if(buyScore >= 4){
+      let sl = low * 0.998; // पिछले लो से थोड़ा नीचे
+      let risk = price - sl;
+      let tp = price + (risk * ratio); // 1:3 या 1:5
+
+      plan = `💥 AI TRADE PLAN: STRONG BUY 💥<br>
+      <b>Symbol:</b> ${currentSymbol}<br>
+      <b>Entry:</b> ${price.toFixed(2)}<br>
+      <b>SL:</b> ${sl.toFixed(2)} <span style="color:red">Loss: $${riskAmount.toFixed(2)}</span><br>
+      <b>TP:</b> ${tp.toFixed(2)} <span style="color:green">Profit: $${(riskAmount*ratio).toFixed(2)}</span><br>
+      <b>Risk:Reward:</b> 1:${ratio}<br>
+      <b>Reason:</b> RSI:${rsi.toFixed(1)} + BB Break + Vol Spike`;
+      document.getElementById('sig').innerHTML = plan;
+      document.getElementById('sig').className = 'plan';
+
+    } else if(sellScore >= 4){
+      let sl = high * 1.002; // पिछले हाई से थोड़ा ऊपर
+      let risk = sl - price;
+      let tp = price - (risk * ratio);
+
+      plan = `💥 AI TRADE PLAN: STRONG SELL 💥<br>
+      <b>Symbol:</b> ${currentSymbol}<br>
+      <b>Entry:</b> ${price.toFixed(2)}<br>
+      <b>SL:</b> ${sl.toFixed(2)} <span style="color:red">Loss: $${riskAmount.toFixed(2)}</span><br>
+      <b>TP:</b> ${tp.toFixed(2)} <span style="color:green">Profit: $${(riskAmount*ratio).toFixed(2)}</span><br>
+      <b>Risk:Reward:</b> 1:${ratio}<br>
+      <b>Reason:</b> RSI:${rsi.toFixed(1)} + BB Break + Vol Spike`;
+      document.getElementById('sig').innerHTML = plan;
+      document.getElementById('sig').className = 'plan';
+
+    } else {
+      document.getElementById('sig').innerHTML = `WAIT FOR WISPHOT<br>Buy:${buyScore}/4 | Sell:${sellScore}/4<br>AI अभी कन्फर्म नहीं है`;
+      document.getElementById('sig').className = 'hold';
+    }
+
+  }catch(e){
+    document.getElementById('sig').innerText = "ERROR: Check Internet";
+  }
+}
+window.onload = ()=> { loadChart(); checkWisphot(); setInterval(checkWisphot, 30000); }
+</script>
+</body>
+</html>
