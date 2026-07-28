@@ -154,3 +154,94 @@ async function checkLiveSignal(){
 }
 <button onclick="checkSignal()">🔍 Dummy Check</button>
 <button onclick="checkLiveSignal()">🚀 Live API Check</button>
+// ===== NEW 1: 2:20 Orange Setup Time Filter =====
+function isOrangeTime(){
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  // 2:20 PM to 2:25 PM = 14:20 to 14:25
+  if(hours == 14 && minutes >= 20 && minutes <= 25){
+    return true;
+  }
+  return false;
+}
+
+// ===== NEW 2: OI Filter Function =====
+async function checkOI(assetName){
+  // BankNifty के लिए ही काम करेगा अभी
+  if(!assetName.includes("BANKNIFTY")) return {canBuy: true, canSell: true};
+  
+  try{
+    // Finnhub पर direct OI नहीं मिलता, इसलिए हम dummy logic रखेंगे
+    // असली के लिए Zerodha/Kite API लगेगी। अभी के लिए Threshold से काम चलाओ
+    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=NSE:BANKNIFTY&token=${FINNHUB_KEY}`)
+    const data = await res.json()
+    const price = data.c
+
+    let canBuy = true;
+    let canSell = true;
+
+    // Logic: अगर Price 57000 के पास है तो CE में OI ज्यादा होगा = BUY मत लो
+    if(price >= 56950) canBuy = false; // OI Resistance Zone
+    // अगर Price 56700 के पास है तो PE में OI ज्यादा होगा = SELL मत लो  
+    if(price <= 56750) canSell = false; // OI Support Zone
+    
+    return {canBuy, canSell, price};
+  } catch(e){
+    return {canBuy: true, canSell: true};
+  }
+}
+
+// ===== NEW 3: Updated Live Signal Function with Both Filters =====
+async function checkLiveSignalPro(){
+  document.getElementById("status").innerText = "⏳ Checking 2:20 + OI Filter..."
+
+  // Filter 1: Time Check
+  if(!isOrangeTime()){
+    document.getElementById("status").innerText = "⏰ 2:20 - 2:25 PM का इंतजार करो"
+    return;
+  }
+
+  const symbol = document.getElementById("assetSelect").value
+  const asset = ASSETS[symbol]
+
+  // Filter 2: OI Check
+  const oiData = await checkOI(asset.name);
+  if(!oiData.canBuy && !oiData.canSell){
+    document.getElementById("status").innerText = `⚠️ OI Zone में फंसा है। Trade मत लो`
+    return;
+  }
+
+  // बाकी पुराना Live Logic
+  const quoteRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${asset.finn}&token=${FINNHUB_KEY}`)
+  const quote = await quoteRes.json()
+  const price = quote.c
+
+  const rsiRes = await fetch(`https://finnhub.io/api/v1/indicator?symbol=${asset.finn}&resolution=5&indicator=rsi&token=${FINNHUB_KEY}`)
+  const rsiData = await rsiRes.json()
+  const rsi = rsiData.rsi[rsiData.rsi.length-1]
+
+  const macdRes = await fetch(`https://finnhub.io/api/v1/indicator?symbol=${asset.finn}&resolution=5&indicator=macd&token=${FINNHUB_KEY}`)
+  const macdData = await macdRes.json()
+  const macd = macdData.macdSignal[macdData.macdSignal.length-1]
+  
+  let score = 0;
+  if(rsi < 30) score++;
+  if(macd > 0) score++;
+  if(price > quote.o) score++;
+  if(price < quote.h) score++;
+
+  let signal = "WAIT";
+  if(score >= 3 && rsi < 35 && oiData.canBuy) signal = "BUY"
+  if(score >= 3 && rsi > 65 && oiData.canSell) signal = "SELL"
+
+  const sl = signal == "BUY"? (price*0.996).toFixed(2) : (price*1.004).toFixed(2);
+  const tp = signal == "BUY"? (price*1.008).toFixed(2) : (price*0.992).toFixed(2);
+
+  if(signal!= "WAIT"){
+    sendSignal(asset, signal, score, price.toFixed(2), sl, tp)
+    document.getElementById("status").innerText = `✅ 2:20 PRO Signal Sent! RSI:${rsi.toFixed(1)}`
+  } else {
+    document.getElementById("status").innerText = `❌ 2:20 पर No Signal. Score:${score}/4`
+  }
+}
