@@ -1,1 +1,108 @@
 const FINNHUB_KEY = "PASTE_YOUR_FINNHUB_KEY_HERE" // यहाँ अपनी key
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Signal Bot Pro</title>
+<style>
+body { font-family: Arial; background:#111; color:#fff; text-align:center; }
+select, button { padding:12px 20px; font-size:16px; margin:10px; background:#00ff88; color:#000; border:none; border-radius:5px; cursor:pointer; font-weight:bold; }
+#chart { width:95%; height:500px; margin:20px auto; }
+#status { color:#00ff88; font-size:18px; }
+</style>
+<script src="https://s3.tradingview.com/tv.js"></script>
+</head>
+<body>
+<h1>🤖 AI Signal Bot Pro - Live</h1>
+
+<select id="assetSelect">
+  <option value="NSE:BANKNIFTY">BANKNIFTY</option>
+  <option value="NSE:NIFTY">NIFTY</option>
+  <option value="BINANCE:BTCUSDT">BTCUSDT</option>
+  <option value="OANDA:XAUUSD">GOLD</option>
+</select>
+
+<button onclick="checkSignal()">🔍 Live Signal Check</button>
+<p id="status">API Key डालो...</p>
+
+<div id="chart"></div>
+
+<script>
+// ===== 1. अपना API KEY और Telegram यहाँ डालो =====
+const FINNHUB_KEY = "PASTE_YOUR_FINNHUB_KEY_HERE" 
+const TELEGRAM_TOKEN = "8534769215:AAH6WcPo6W9YURbnJmT1AIoApRsYedXgbRk"
+const CHAT_ID = "8872099638"
+
+const ASSETS = {
+  "NSE:BANKNIFTY": { name: "BANKNIFTY", tv: "NSE%3ABANKNIFTY", finn: "NSE:BANKNIFTY" },
+  "NSE:NIFTY": { name: "NIFTY", tv: "NSE%3ANIFTY", finn: "NSE:NIFTY" },
+  "BINANCE:BTCUSDT": { name: "BTCUSDT", tv: "BINANCE%3ABTCUSDT", finn: "BINANCE:BTCUSDT" },
+  "OANDA:XAUUSD": { name: "GOLD", tv: "OANDA%3AXAUUSD", finn: "OANDA:XAUUSD" }
+}
+
+// ===== Chart Load =====
+function loadChart(symbol){
+  new TradingView.widget({
+    "width": "100%", "height": 500, "symbol": symbol, "interval": "5",
+    "theme": "dark", "style": "1", "container_id": "chart",
+    "studies": ["MACD@tv-basicstudies","RSI@tv-basicstudies","MASimple@tv-basicstudies","BB@tv-basicstudies"]
+  });
+}
+document.getElementById("assetSelect").onchange = () => {
+  document.getElementById("chart").innerHTML = "";
+  loadChart(document.getElementById("assetSelect").value);
+}
+loadChart("NSE:BANKNIFTY");
+
+// ===== Telegram भेजने का Function =====
+function sendSignal(asset, signal, score, entry, sl, tp, rsi, macd) {
+  const emoji = signal === "BUY"? "🟢" : "🔴"
+  const message = `${emoji} 💥 LIVE AI सिग्नल: ${asset.name}\n\nसिग्नल: ${signal}\nScore: ${score}/4\nEntry: ${entry}\nSL: ${sl}\nTarget: ${tp}\n\nRSI: ${rsi.toFixed(2)} | MACD: ${macd.toFixed(2)}\n📊 Chart: https://www.tradingview.com/chart/?symbol=${asset.tv}`
+  fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${encodeURIComponent(message)}`)
+ .then(()=> document.getElementById("status").innerText = "✅ Live Signal Sent!")
+}
+
+// ===== असली API से Data लाने का Function =====
+async function checkSignal(){
+  document.getElementById("status").innerText = "⏳ Fetching Live Data..."
+  const symbol = document.getElementById("assetSelect").value
+  const asset = ASSETS[symbol]
+  
+  // 1. Price लो
+  const quoteRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${asset.finn}&token=${FINNHUB_KEY}`)
+  const quote = await quoteRes.json()
+  const price = quote.c
+
+  // 2. RSI लो
+  const rsiRes = await fetch(`https://finnhub.io/api/v1/indicator?symbol=${asset.finn}&resolution=5&indicator=rsi&token=${FINNHUB_KEY}`)
+  const rsiData = await rsiRes.json()
+  const rsi = rsiData.rsi[rsiData.rsi.length-1]
+
+  // 3. MACD लो
+  const macdRes = await fetch(`https://finnhub.io/api/v1/indicator?symbol=${asset.finn}&resolution=5&indicator=macd&token=${FINNHUB_KEY}`)
+  const macdData = await macdRes.json()
+  const macd = macdData.macdSignal[macdData.macdSignal.length-1]
+  
+  // 4. Score बनाओ
+  let score = 0;
+  if(rsi < 30 && macd > 0) score++; // Oversold + Bullish
+  if(rsi > 70 && macd < 0) score++; // Overbought + Bearish
+  if(price > quote.o) score++; // Price up
+  if(price < quote.o) score++; // Price down
+  
+  let signal = "WAIT";
+  if(score >= 3 && rsi < 35) signal = "BUY"
+  if(score >= 3 && rsi > 65) signal = "SELL"
+
+  const sl = signal == "BUY"? (price*0.996).toFixed(2) : (price*1.004).toFixed(2);
+  const tp = signal == "BUY"? (price*1.008).toFixed(2) : (price*0.992).toFixed(2);
+
+  if(signal!= "WAIT"){
+    sendSignal(asset, signal, score, price.toFixed(2), sl, tp, rsi, macd)
+  } else {
+    document.getElementById("status").innerText = `❌ No Strong Signal. Score: ${score}/4 | RSI: ${rsi.toFixed(2)}`
+  }
+}
+</script>
+</body>
+                                </html>
