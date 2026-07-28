@@ -106,3 +106,49 @@ async function checkSignal(){
 </script>
 </body>
                                 </html>
+// ===== NEW: Live API वाला Function =====
+async function checkLiveSignal(){
+  document.getElementById("status").innerText = "⏳ Fetching Live Data from API..."
+  const symbol = document.getElementById("assetSelect").value
+  const asset = ASSETS[symbol]
+
+  try{
+    // 1. Price
+    const quoteRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${asset.finn}&token=${FINNHUB_KEY}`)
+    const quote = await quoteRes.json()
+    const price = quote.c
+
+    // 2. RSI
+    const rsiRes = await fetch(`https://finnhub.io/api/v1/indicator?symbol=${asset.finn}&resolution=5&indicator=rsi&token=${FINNHUB_KEY}`)
+    const rsiData = await rsiRes.json()
+    const rsi = rsiData.rsi[rsiData.rsi.length-1]
+
+    // 3. MACD
+    const macdRes = await fetch(`https://finnhub.io/api/v1/indicator?symbol=${asset.finn}&resolution=5&indicator=macd&token=${FINNHUB_KEY}`)
+    const macdData = await macdRes.json()
+    const macd = macdData.macdSignal[macdData.macdSignal.length-1]
+
+    // 4. Score Logic
+    let score = 0;
+    if(rsi < 30) score++;
+    if(macd > 0) score++;
+    if(price > quote.o) score++;
+    if(price < quote.h) score++; // volatility
+
+    let signal = "WAIT";
+    if(score >= 3 && rsi < 35) signal = "BUY"
+    if(score >= 3 && rsi > 65) signal = "SELL"
+
+    const sl = signal == "BUY"? (price*0.996).toFixed(2) : (price*1.004).toFixed(2);
+    const tp = signal == "BUY"? (price*1.008).toFixed(2) : (price*0.992).toFixed(2);
+
+    if(signal!= "WAIT"){
+      sendSignal(asset, signal, score, price.toFixed(2), sl, tp)
+      document.getElementById("status").innerText = `✅ LIVE Signal Sent! RSI:${rsi.toFixed(1)}`
+    } else {
+      document.getElementById("status").innerText = `❌ No Signal. Score:${score}/4 RSI:${rsi.toFixed(1)}`
+    }
+  } catch(e){
+    document.getElementById("status").innerText = "⚠️ API Error. Key check karo"
+  }
+}
